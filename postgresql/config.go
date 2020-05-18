@@ -317,7 +317,7 @@ func (c *Client) DB() *sql.DB {
 // capabilities.  This is only run once per Client.
 func fingerprintCapabilities(db *sql.DB) (*semver.Version, error) {
 	var pgVersion string
-	err := db.QueryRow(`SELECT VERSION()`).Scan(&pgVersion)
+	err := db.QueryRow(`select setting from pg_catalog.pg_settings where name='server_version'`).Scan(&pgVersion)
 	if err != nil {
 		return nil, errwrap.Wrapf("error PostgreSQL version: {{err}}", err)
 	}

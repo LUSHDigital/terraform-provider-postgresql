@@ -1,6 +1,8 @@
 Terraform Provider
 ==================
 
+:exclamation: :exclamation: This is not _really_ for postgresql. This is for CockroachDB. :exclamation: :exclamation:
+
 - Website: https://www.terraform.io
 - [![Gitter chat](https://badges.gitter.im/hashicorp-terraform/Lobby.png)](https://gitter.im/hashicorp-terraform/Lobby)
 - Mailing list: [Google Groups](http://groups.google.com/group/terraform-tool)
