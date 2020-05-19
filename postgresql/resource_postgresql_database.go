@@ -22,7 +22,6 @@ const (
 	dbEncodingAttr   = "encoding"
 	dbIsTemplateAttr = "is_template"
 	dbNameAttr       = "name"
-	dbOwnerAttr      = "owner"
 	dbTablespaceAttr = "tablespace_name"
 	dbTemplateAttr   = "template"
 )
@@ -43,12 +42,6 @@ func resourcePostgreSQLDatabase() *schema.Resource {
 				Type:        schema.TypeString,
 				Required:    true,
 				Description: "The PostgreSQL database name to connect to",
-			},
-			dbOwnerAttr: {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Computed:    true,
-				Description: "The ROLE which owns the database",
 			},
 			dbTemplateAttr: {
 				Type:        schema.TypeString,
@@ -123,25 +116,7 @@ func resourcePostgreSQLDatabaseCreate(d *schema.ResourceData, meta interface{}) 
 }
 
 func createDatabase(c *Client, d *schema.ResourceData) error {
-	currentUser := c.config.getDatabaseUsername()
-	owner := d.Get(dbOwnerAttr).(string)
-
-	db := c.DB()
-
 	var err error
-	if owner != "" {
-		// Needed in order to set the owner of the db if the connection user is not a
-		// superuser
-		ownerGranted, err := grantRoleMembership(db, owner, currentUser)
-		if err != nil {
-			return err
-		}
-		if ownerGranted {
-			defer func() {
-				err = revokeRoleMembership(db, owner, currentUser)
-			}()
-		}
-	}
 
 	dbName := d.Get(dbNameAttr).(string)
 	b := bytes.NewBufferString("CREATE DATABASE ")
@@ -171,23 +146,7 @@ func resourcePostgreSQLDatabaseDelete(d *schema.ResourceData, meta interface{}) 
 	c.catalogLock.Lock()
 	defer c.catalogLock.Unlock()
 
-	currentUser := c.config.getDatabaseUsername()
-	owner := d.Get(dbOwnerAttr).(string)
-
 	var err error
-	if owner != "" {
-		// Needed in order to set the owner of the db if the connection user is not a
-		// superuser
-		ownerGranted, err := grantRoleMembership(c.DB(), owner, currentUser)
-		if err != nil {
-			return err
-		}
-		if ownerGranted {
-			defer func() {
-				err = revokeRoleMembership(c.DB(), owner, currentUser)
-			}()
-		}
-	}
 
 	dbName := d.Get(dbNameAttr).(string)
 	if c.featureSupported(featureDBIsTemplate) {
@@ -330,10 +289,6 @@ func resourcePostgreSQLDatabaseUpdate(d *schema.ResourceData, meta interface{}) 
 		return err
 	}
 
-	if err := setDBOwner(c, d); err != nil {
-		return err
-	}
-
 	if err := setDBTablespace(c.DB(), d); err != nil {
 		return err
 	}
@@ -374,39 +329,6 @@ func setDBName(db *sql.DB, d *schema.ResourceData) error {
 	d.SetId(n)
 
 	return nil
-}
-
-func setDBOwner(c *Client, d *schema.ResourceData) error {
-	if !d.HasChange(dbOwnerAttr) {
-		return nil
-	}
-
-	owner := d.Get(dbOwnerAttr).(string)
-	if owner == "" {
-		return nil
-	}
-	currentUser := c.config.getDatabaseUsername()
-
-	db := c.DB()
-
-	//needed in order to set the owner of the db if the connection user is not a superuser
-	ownerGranted, err := grantRoleMembership(db, owner, currentUser)
-	if err != nil {
-		return err
-	}
-	if ownerGranted {
-		defer func() {
-			err = revokeRoleMembership(db, owner, currentUser)
-		}()
-	}
-
-	dbName := d.Get(dbNameAttr).(string)
-	sql := fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", pq.QuoteIdentifier(dbName), pq.QuoteIdentifier(owner))
-	if _, err := db.Exec(sql); err != nil {
-		return errwrap.Wrapf("Error updating database OWNER: {{err}}", err)
-	}
-
-	return err
 }
 
 func setDBTablespace(db *sql.DB, d *schema.ResourceData) error {
