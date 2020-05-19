@@ -37,8 +37,6 @@ func TestAccPostgresqlRole_Basic(t *testing.T) {
 					resource.TestCheckResourceAttr("postgresql_role.role_with_defaults", "inherit", "false"),
 					resource.TestCheckResourceAttr("postgresql_role.role_with_defaults", "replication", "false"),
 					resource.TestCheckResourceAttr("postgresql_role.role_with_defaults", "bypass_row_level_security", "false"),
-					resource.TestCheckResourceAttr("postgresql_role.role_with_defaults", "connection_limit", "-1"),
-					resource.TestCheckResourceAttr("postgresql_role.role_with_defaults", "encrypted_password", "true"),
 					resource.TestCheckResourceAttr("postgresql_role.role_with_defaults", "password", ""),
 					resource.TestCheckResourceAttr("postgresql_role.role_with_defaults", "valid_until", "infinity"),
 					resource.TestCheckResourceAttr("postgresql_role.role_with_defaults", "skip_drop_role", "false"),
@@ -85,7 +83,6 @@ resource "postgresql_role" "group_role" {
 resource "postgresql_role" "update_role" {
   name = "update_role2"
   login = true
-  connection_limit = 5
   password = "titi"
   roles = ["${postgresql_role.group_role.name}"]
   search_path = ["mysearchpath"]
@@ -106,7 +103,6 @@ resource "postgresql_role" "update_role" {
 					testAccCheckPostgresqlRoleExists("update_role", []string{}, nil),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "name", "update_role"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "login", "true"),
-					resource.TestCheckResourceAttr("postgresql_role.update_role", "connection_limit", "-1"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "password", "toto"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "valid_until", "2099-05-04 12:00:00+00"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "roles.#", "0"),
@@ -122,7 +118,6 @@ resource "postgresql_role" "update_role" {
 					resource.TestCheckResourceAttr(
 						"postgresql_role.update_role", "name", "update_role2",
 					),
-					resource.TestCheckResourceAttr("postgresql_role.update_role", "connection_limit", "5"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "login", "true"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "password", "titi"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "valid_until", "infinity"),
@@ -145,7 +140,6 @@ resource "postgresql_role" "update_role" {
 					testAccCheckPostgresqlRoleExists("update_role", []string{}, nil),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "name", "update_role"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "login", "true"),
-					resource.TestCheckResourceAttr("postgresql_role.update_role", "connection_limit", "-1"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "password", "toto"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "roles.#", "0"),
 					resource.TestCheckResourceAttr("postgresql_role.update_role", "search_path.#", "0"),
@@ -302,13 +296,6 @@ resource "postgresql_role" "role_with_pwd" {
   password = "mypass"
 }
 
-resource "postgresql_role" "role_with_pwd_encr" {
-  name = "role_with_pwd_encr"
-  login = true
-  password = "mypass"
-  encrypted_password = true
-}
-
 resource "postgresql_role" "role_simple" {
   name = "role_simple"
 }
@@ -322,8 +309,6 @@ resource "postgresql_role" "role_with_defaults" {
   login = false
   replication = false
   bypass_row_level_security = false
-  connection_limit = -1
-  encrypted_password = true
   password = ""
   skip_drop_role = false
   skip_reassign_owned = false

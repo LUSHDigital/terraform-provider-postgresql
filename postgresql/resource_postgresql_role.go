@@ -17,26 +17,14 @@ import (
 )
 
 const (
-	roleBypassRLSAttr         = "bypass_row_level_security"
-	roleConnLimitAttr         = "connection_limit"
-	roleCreateDBAttr          = "create_database"
-	roleCreateRoleAttr        = "create_role"
-	roleEncryptedPassAttr     = "encrypted_password"
-	roleInheritAttr           = "inherit"
-	roleLoginAttr             = "login"
-	roleNameAttr              = "name"
-	rolePasswordAttr          = "password"
-	roleReplicationAttr       = "replication"
-	roleSkipDropRoleAttr      = "skip_drop_role"
-	roleSkipReassignOwnedAttr = "skip_reassign_owned"
-	roleSuperuserAttr         = "superuser"
-	roleValidUntilAttr        = "valid_until"
-	roleRolesAttr             = "roles"
-	roleSearchPathAttr        = "search_path"
-	roleStatementTimeoutAttr  = "statement_timeout"
-
-	// Deprecated options
-	roleDepEncryptedAttr = "encrypted"
+	roleCreateRoleAttr       = "create_role"
+	roleLoginAttr            = "login"
+	roleNameAttr             = "name"
+	rolePasswordAttr         = "password"
+	roleSkipDropRoleAttr     = "skip_drop_role"
+	roleValidUntilAttr       = "valid_until"
+	roleRolesAttr            = "roles"
+	roleStatementTimeoutAttr = "statement_timeout"
 )
 
 func resourcePostgreSQLRole() *schema.Resource {
@@ -62,11 +50,6 @@ func resourcePostgreSQLRole() *schema.Resource {
 				Sensitive:   true,
 				Description: "Sets the role's password",
 			},
-			roleDepEncryptedAttr: {
-				Type:       schema.TypeString,
-				Optional:   true,
-				Deprecated: fmt.Sprintf("Rename PostgreSQL role resource attribute %q to %q", roleDepEncryptedAttr, roleEncryptedPassAttr),
-			},
 			roleRolesAttr: {
 				Type:        schema.TypeSet,
 				Optional:    true,
@@ -75,43 +58,11 @@ func resourcePostgreSQLRole() *schema.Resource {
 				MinItems:    0,
 				Description: "Role(s) to grant to this new role",
 			},
-			roleSearchPathAttr: {
-				Type:        schema.TypeList,
-				Optional:    true,
-				Elem:        &schema.Schema{Type: schema.TypeString},
-				MinItems:    0,
-				Description: "Sets the role's search path",
-			},
-			roleEncryptedPassAttr: {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     true,
-				Description: "Control whether the password is stored encrypted in the system catalogs",
-			},
 			roleValidUntilAttr: {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Default:     "infinity",
 				Description: "Sets a date and time after which the role's password is no longer valid",
-			},
-			roleConnLimitAttr: {
-				Type:         schema.TypeInt,
-				Optional:     true,
-				Default:      -1,
-				Description:  "How many concurrent connections can be made with this role",
-				ValidateFunc: validation.IntAtLeast(-1),
-			},
-			roleSuperuserAttr: {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
-				Description: `Determine whether the new role is a "superuser"`,
-			},
-			roleCreateDBAttr: {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
-				Description: "Define a role's ability to create databases",
 			},
 			roleCreateRoleAttr: {
 				Type:        schema.TypeBool,
@@ -119,41 +70,17 @@ func resourcePostgreSQLRole() *schema.Resource {
 				Default:     false,
 				Description: "Determine whether this role will be permitted to create new roles",
 			},
-			roleInheritAttr: {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     true,
-				Description: `Determine whether a role "inherits" the privileges of roles it is a member of`,
-			},
 			roleLoginAttr: {
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Default:     false,
 				Description: "Determine whether a role is allowed to log in",
 			},
-			roleReplicationAttr: {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
-				Description: "Determine whether a role is allowed to initiate streaming replication or put the system in and out of backup mode",
-			},
-			roleBypassRLSAttr: {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
-				Description: "Determine whether a role bypasses every row-level security (RLS) policy",
-			},
 			roleSkipDropRoleAttr: {
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Default:     false,
 				Description: "Skip actually running the DROP ROLE command when removing a ROLE from PostgreSQL",
-			},
-			roleSkipReassignOwnedAttr: {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
-				Description: "Skip actually running the REASSIGN OWNED command when removing a role from PostgreSQL",
 			},
 			roleStatementTimeoutAttr: {
 				Type:         schema.TypeInt,
@@ -183,12 +110,6 @@ func resourcePostgreSQLRoleCreate(d *schema.ResourceData, meta interface{}) erro
 		{rolePasswordAttr, "PASSWORD"},
 		{roleValidUntilAttr, "VALID UNTIL"},
 	}
-	intOpts := []struct {
-		hclKey string
-		sqlKey string
-	}{
-		{roleConnLimitAttr, "CONNECTION LIMIT"},
-	}
 
 	type boolOptType struct {
 		hclKey        string
@@ -196,24 +117,13 @@ func resourcePostgreSQLRoleCreate(d *schema.ResourceData, meta interface{}) erro
 		sqlKeyDisable string
 	}
 	boolOpts := []boolOptType{
-		{roleSuperuserAttr, "SUPERUSER", "NOSUPERUSER"},
-		{roleCreateDBAttr, "CREATEDB", "NOCREATEDB"},
 		{roleCreateRoleAttr, "CREATEROLE", "NOCREATEROLE"},
-		{roleInheritAttr, "INHERIT", "NOINHERIT"},
 		{roleLoginAttr, "LOGIN", "NOLOGIN"},
 		// roleEncryptedPassAttr is used only when rolePasswordAttr is set.
 		// {roleEncryptedPassAttr, "ENCRYPTED", "UNENCRYPTED"},
 	}
 
-	if c.featureSupported(featureRLS) {
-		boolOpts = append(boolOpts, boolOptType{roleBypassRLSAttr, "BYPASSRLS", "NOBYPASSRLS"})
-	}
-
-	if c.featureSupported(featureReplication) {
-		boolOpts = append(boolOpts, boolOptType{roleReplicationAttr, "REPLICATION", "NOREPLICATION"})
-	}
-
-	createOpts := make([]string, 0, len(stringOpts)+len(intOpts)+len(boolOpts))
+	createOpts := make([]string, 0, len(stringOpts)+len(boolOpts))
 
 	for _, opt := range stringOpts {
 		v, ok := d.GetOk(opt.hclKey)
@@ -228,11 +138,6 @@ func resourcePostgreSQLRoleCreate(d *schema.ResourceData, meta interface{}) erro
 				if strings.ToUpper(v.(string)) == "NULL" {
 					createOpts = append(createOpts, "PASSWORD NULL")
 				} else {
-					if d.Get(roleEncryptedPassAttr).(bool) {
-						createOpts = append(createOpts, "ENCRYPTED")
-					} else {
-						createOpts = append(createOpts, "UNENCRYPTED")
-					}
 					createOpts = append(createOpts, fmt.Sprintf("%s '%s'", opt.sqlKey, pqQuoteLiteral(val)))
 				}
 			case opt.hclKey == roleValidUntilAttr:
@@ -248,17 +153,7 @@ func resourcePostgreSQLRoleCreate(d *schema.ResourceData, meta interface{}) erro
 		}
 	}
 
-	for _, opt := range intOpts {
-		val := d.Get(opt.hclKey).(int)
-		createOpts = append(createOpts, fmt.Sprintf("%s %d", opt.sqlKey, val))
-	}
-
 	for _, opt := range boolOpts {
-		if opt.hclKey == roleEncryptedPassAttr {
-			// This attribute is handled above in the stringOpts
-			// loop.
-			continue
-		}
 		val := d.Get(opt.hclKey).(bool)
 		valStr := opt.sqlKeyDisable
 		if val {
@@ -284,10 +179,6 @@ func resourcePostgreSQLRoleCreate(d *schema.ResourceData, meta interface{}) erro
 	}
 
 	if err = grantRoles(txn, d); err != nil {
-		return err
-	}
-
-	if err = alterSearchPath(txn, d); err != nil {
 		return err
 	}
 
@@ -318,14 +209,6 @@ func resourcePostgreSQLRoleDelete(d *schema.ResourceData, meta interface{}) erro
 	roleName := d.Get(roleNameAttr).(string)
 
 	queries := make([]string, 0, 3)
-	if !d.Get(roleSkipReassignOwnedAttr).(bool) {
-		if c.featureSupported(featureReassignOwnedCurrentUser) {
-			queries = append(queries, fmt.Sprintf("REASSIGN OWNED BY %s TO CURRENT_USER", pq.QuoteIdentifier(roleName)))
-		} else {
-			queries = append(queries, fmt.Sprintf("REASSIGN OWNED BY %s TO %s", pq.QuoteIdentifier(roleName), pq.QuoteIdentifier(c.config.getDatabaseUsername())))
-		}
-		queries = append(queries, fmt.Sprintf("DROP OWNED BY %s", pq.QuoteIdentifier(roleName)))
-	}
 
 	if !d.Get(roleSkipDropRoleAttr).(bool) {
 		queries = append(queries, fmt.Sprintf("DROP ROLE %s", pq.QuoteIdentifier(roleName)))
@@ -374,8 +257,7 @@ func resourcePostgreSQLRoleRead(d *schema.ResourceData, meta interface{}) error 
 }
 
 func resourcePostgreSQLRoleReadImpl(c *Client, d *schema.ResourceData) error {
-	var roleSuperuser, roleInherit, roleCreateRole, roleCreateDB, roleCanLogin, roleReplication, roleBypassRLS bool
-	var roleConnLimit int
+	var roleCreateRole, roleCanLogin bool
 	var roleName, roleValidUntil string
 	var roleRoles, roleConfig pq.ByteaArray
 
@@ -383,12 +265,8 @@ func resourcePostgreSQLRoleReadImpl(c *Client, d *schema.ResourceData) error {
 
 	columns := []string{
 		"rolname",
-		"rolsuper",
-		"rolinherit",
 		"rolcreaterole",
-		"rolcreatedb",
 		"rolcanlogin",
-		"rolconnlimit",
 		`COALESCE(rolvaliduntil::TEXT, 'infinity')`,
 		"rolconfig",
 	}
@@ -396,24 +274,10 @@ func resourcePostgreSQLRoleReadImpl(c *Client, d *schema.ResourceData) error {
 	values := []interface{}{
 		&roleRoles,
 		&roleName,
-		&roleSuperuser,
-		&roleInherit,
 		&roleCreateRole,
-		&roleCreateDB,
 		&roleCanLogin,
-		&roleConnLimit,
 		&roleValidUntil,
 		&roleConfig,
-	}
-
-	if c.featureSupported(featureReplication) {
-		columns = append(columns, "rolreplication")
-		values = append(values, &roleReplication)
-	}
-
-	if c.featureSupported(featureRLS) {
-		columns = append(columns, "rolbypassrls")
-		values = append(values, &roleBypassRLS)
 	}
 
 	roleSQL := fmt.Sprintf(`SELECT ARRAY(
@@ -435,20 +299,11 @@ func resourcePostgreSQLRoleReadImpl(c *Client, d *schema.ResourceData) error {
 	}
 
 	d.Set(roleNameAttr, roleName)
-	d.Set(roleConnLimitAttr, roleConnLimit)
-	d.Set(roleCreateDBAttr, roleCreateDB)
 	d.Set(roleCreateRoleAttr, roleCreateRole)
-	d.Set(roleEncryptedPassAttr, true)
-	d.Set(roleInheritAttr, roleInherit)
 	d.Set(roleLoginAttr, roleCanLogin)
 	d.Set(roleSkipDropRoleAttr, d.Get(roleSkipDropRoleAttr).(bool))
-	d.Set(roleSkipReassignOwnedAttr, d.Get(roleSkipReassignOwnedAttr).(bool))
-	d.Set(roleSuperuserAttr, roleSuperuser)
 	d.Set(roleValidUntilAttr, roleValidUntil)
-	d.Set(roleReplicationAttr, roleReplication)
-	d.Set(roleReplicationAttr, roleBypassRLS)
 	d.Set(roleRolesAttr, pgArrayToSet(roleRoles))
-	d.Set(roleSearchPathAttr, readSearchPath(roleConfig))
 
 	statementTimeout, err := readStatementTimeout(roleConfig)
 	if err != nil {
@@ -465,19 +320,6 @@ func resourcePostgreSQLRoleReadImpl(c *Client, d *schema.ResourceData) error {
 	}
 
 	d.Set(rolePasswordAttr, password)
-	return nil
-}
-
-// readSearchPath searches for a search_path entry in the rolconfig array.
-// In case no such value is present, it returns nil.
-func readSearchPath(roleConfig pq.ByteaArray) []string {
-	for _, v := range roleConfig {
-		config := string(v)
-		if strings.HasPrefix(config, roleSearchPathAttr) {
-			var result = strings.Split(strings.TrimPrefix(config, roleSearchPathAttr+"="), ", ")
-			return result
-		}
-	}
 	return nil
 }
 
@@ -576,35 +418,11 @@ func resourcePostgreSQLRoleUpdate(d *schema.ResourceData, meta interface{}) erro
 		return err
 	}
 
-	if err := setRoleBypassRLS(c, txn, d); err != nil {
-		return err
-	}
-
-	if err := setRoleConnLimit(txn, d); err != nil {
-		return err
-	}
-
-	if err := setRoleCreateDB(txn, d); err != nil {
-		return err
-	}
-
 	if err := setRoleCreateRole(txn, d); err != nil {
 		return err
 	}
 
-	if err := setRoleInherit(txn, d); err != nil {
-		return err
-	}
-
 	if err := setRoleLogin(txn, d); err != nil {
-		return err
-	}
-
-	if err := setRoleReplication(txn, d); err != nil {
-		return err
-	}
-
-	if err := setRoleSuperuser(txn, d); err != nil {
 		return err
 	}
 
@@ -618,10 +436,6 @@ func resourcePostgreSQLRoleUpdate(d *schema.ResourceData, meta interface{}) erro
 	}
 
 	if err = grantRoles(txn, d); err != nil {
-		return err
-	}
-
-	if err = alterSearchPath(txn, d); err != nil {
 		return err
 	}
 
@@ -675,63 +489,6 @@ func setRolePassword(txn *sql.Tx, d *schema.ResourceData) error {
 	return nil
 }
 
-func setRoleBypassRLS(c *Client, txn *sql.Tx, d *schema.ResourceData) error {
-	if !d.HasChange(roleBypassRLSAttr) {
-		return nil
-	}
-
-	if !c.featureSupported(featureRLS) {
-		return fmt.Errorf("PostgreSQL client is talking with a server (%q) that does not support PostgreSQL Row-Level Security", c.version.String())
-	}
-
-	bypassRLS := d.Get(roleBypassRLSAttr).(bool)
-	tok := "NOBYPASSRLS"
-	if bypassRLS {
-		tok = "BYPASSRLS"
-	}
-	roleName := d.Get(roleNameAttr).(string)
-	sql := fmt.Sprintf("ALTER ROLE %s WITH %s", pq.QuoteIdentifier(roleName), tok)
-	if _, err := txn.Exec(sql); err != nil {
-		return errwrap.Wrapf("Error updating role BYPASSRLS: {{err}}", err)
-	}
-
-	return nil
-}
-
-func setRoleConnLimit(txn *sql.Tx, d *schema.ResourceData) error {
-	if !d.HasChange(roleConnLimitAttr) {
-		return nil
-	}
-
-	connLimit := d.Get(roleConnLimitAttr).(int)
-	roleName := d.Get(roleNameAttr).(string)
-	sql := fmt.Sprintf("ALTER ROLE %s CONNECTION LIMIT %d", pq.QuoteIdentifier(roleName), connLimit)
-	if _, err := txn.Exec(sql); err != nil {
-		return errwrap.Wrapf("Error updating role CONNECTION LIMIT: {{err}}", err)
-	}
-
-	return nil
-}
-
-func setRoleCreateDB(txn *sql.Tx, d *schema.ResourceData) error {
-	if !d.HasChange(roleCreateDBAttr) {
-		return nil
-	}
-
-	createDB := d.Get(roleCreateDBAttr).(bool)
-	tok := "NOCREATEDB"
-	if createDB {
-		tok = "CREATEDB"
-	}
-	roleName := d.Get(roleNameAttr).(string)
-	sql := fmt.Sprintf("ALTER ROLE %s WITH %s", pq.QuoteIdentifier(roleName), tok)
-	if _, err := txn.Exec(sql); err != nil {
-		return errwrap.Wrapf("Error updating role CREATEDB: {{err}}", err)
-	}
-
-	return nil
-}
-
 func setRoleCreateRole(txn *sql.Tx, d *schema.ResourceData) error {
 	if !d.HasChange(roleCreateRoleAttr) {
 		return nil
@@ -751,25 +508,6 @@ func setRoleCreateRole(txn *sql.Tx, d *schema.ResourceData) error {
 	return nil
 }
 
-func setRoleInherit(txn *sql.Tx, d *schema.ResourceData) error {
-	if !d.HasChange(roleInheritAttr) {
-		return nil
-	}
-
-	inherit := d.Get(roleInheritAttr).(bool)
-	tok := "NOINHERIT"
-	if inherit {
-		tok = "INHERIT"
-	}
-	roleName := d.Get(roleNameAttr).(string)
-	sql := fmt.Sprintf("ALTER ROLE %s WITH %s", pq.QuoteIdentifier(roleName), tok)
-	if _, err := txn.Exec(sql); err != nil {
-		return errwrap.Wrapf("Error updating role INHERIT: {{err}}", err)
-	}
-
-	return nil
-}
-
 func setRoleLogin(txn *sql.Tx, d *schema.ResourceData) error {
 	if !d.HasChange(roleLoginAttr) {
 		return nil
@@ -784,44 +522,6 @@ func setRoleLogin(txn *sql.Tx, d *schema.ResourceData) error {
 	sql := fmt.Sprintf("ALTER ROLE %s WITH %s", pq.QuoteIdentifier(roleName), tok)
 	if _, err := txn.Exec(sql); err != nil {
 		return errwrap.Wrapf("Error updating role LOGIN: {{err}}", err)
-	}
-
-	return nil
-}
-
-func setRoleReplication(txn *sql.Tx, d *schema.ResourceData) error {
-	if !d.HasChange(roleReplicationAttr) {
-		return nil
-	}
-
-	replication := d.Get(roleReplicationAttr).(bool)
-	tok := "NOREPLICATION"
-	if replication {
-		tok = "REPLICATION"
-	}
-	roleName := d.Get(roleNameAttr).(string)
-	sql := fmt.Sprintf("ALTER ROLE %s WITH %s", pq.QuoteIdentifier(roleName), tok)
-	if _, err := txn.Exec(sql); err != nil {
-		return errwrap.Wrapf("Error updating role REPLICATION: {{err}}", err)
-	}
-
-	return nil
-}
-
-func setRoleSuperuser(txn *sql.Tx, d *schema.ResourceData) error {
-	if !d.HasChange(roleSuperuserAttr) {
-		return nil
-	}
-
-	superuser := d.Get(roleSuperuserAttr).(bool)
-	tok := "NOSUPERUSER"
-	if superuser {
-		tok = "SUPERUSER"
-	}
-	roleName := d.Get(roleNameAttr).(string)
-	sql := fmt.Sprintf("ALTER ROLE %s WITH %s", pq.QuoteIdentifier(roleName), tok)
-	if _, err := txn.Exec(sql); err != nil {
-		return errwrap.Wrapf("Error updating role SUPERUSER: {{err}}", err)
 	}
 
 	return nil
@@ -897,33 +597,6 @@ func grantRoles(txn *sql.Tx, d *schema.ResourceData) error {
 		if _, err := txn.Exec(query); err != nil {
 			return errwrap.Wrapf(fmt.Sprintf("could not grant role %s to %s: {{err}}", grantingRole, role), err)
 		}
-	}
-	return nil
-}
-
-func alterSearchPath(txn *sql.Tx, d *schema.ResourceData) error {
-	role := d.Get(roleNameAttr).(string)
-	searchPathInterface := d.Get(roleSearchPathAttr).([]interface{})
-
-	var searchPathString []string
-	if len(searchPathInterface) > 0 {
-		searchPathString = make([]string, len(searchPathInterface))
-		for i, searchPathPart := range searchPathInterface {
-			if strings.Contains(searchPathPart.(string), ", ") {
-				return fmt.Errorf("search_path cannot contain `, `: %v", searchPathPart)
-			}
-			searchPathString[i] = pq.QuoteIdentifier(searchPathPart.(string))
-		}
-	} else {
-		searchPathString = []string{"DEFAULT"}
-	}
-	searchPath := strings.Join(searchPathString[:], ", ")
-
-	query := fmt.Sprintf(
-		"ALTER ROLE %s SET search_path TO %s", pq.QuoteIdentifier(role), searchPath,
-	)
-	if _, err := txn.Exec(query); err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not set search_path %s for %s: {{err}}", searchPath, role), err)
 	}
 	return nil
 }
