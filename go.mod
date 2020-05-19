@@ -1,5 +1,7 @@
 module github.com/terraform-providers/terraform-provider-postgresql
 
+go 1.14
+
 require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/hashicorp/errwrap v1.0.0
