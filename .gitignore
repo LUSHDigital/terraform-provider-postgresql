@@ -31,3 +31,6 @@ website/vendor
 !command/test-fixtures/**/.terraform/
 data/
 postgresql/pwfile
+
+# Goreleaser
+dist/
