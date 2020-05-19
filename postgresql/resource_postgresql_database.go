@@ -147,26 +147,6 @@ func createDatabase(c *Client, d *schema.ResourceData) error {
 	b := bytes.NewBufferString("CREATE DATABASE ")
 	fmt.Fprint(b, pq.QuoteIdentifier(dbName))
 
-	// Handle each option individually and stream results into the query
-	// buffer.
-	switch v, ok := d.GetOk(dbOwnerAttr); {
-	case ok:
-		fmt.Fprint(b, " OWNER ", pq.QuoteIdentifier(v.(string)))
-	default:
-		// No owner specified in the config, default to using
-		// the connecting username.
-		fmt.Fprint(b, " OWNER ", pq.QuoteIdentifier(currentUser))
-	}
-
-	switch v, ok := d.GetOk(dbTemplateAttr); {
-	case ok && strings.ToUpper(v.(string)) == "DEFAULT":
-		fmt.Fprint(b, " TEMPLATE DEFAULT")
-	case ok:
-		fmt.Fprint(b, " TEMPLATE ", pq.QuoteIdentifier(v.(string)))
-	case v.(string) == "":
-		fmt.Fprint(b, " TEMPLATE template0")
-	}
-
 	switch v, ok := d.GetOk(dbEncodingAttr); {
 	case ok && strings.ToUpper(v.(string)) == "DEFAULT":
 		fmt.Fprintf(b, " ENCODING DEFAULT")
@@ -174,46 +154,6 @@ func createDatabase(c *Client, d *schema.ResourceData) error {
 		fmt.Fprintf(b, " ENCODING '%s' ", pqQuoteLiteral(v.(string)))
 	case v.(string) == "":
 		fmt.Fprint(b, ` ENCODING 'UTF8'`)
-	}
-
-	switch v, ok := d.GetOk(dbCollationAttr); {
-	case ok && strings.ToUpper(v.(string)) == "DEFAULT":
-		fmt.Fprintf(b, " LC_COLLATE DEFAULT")
-	case ok:
-		fmt.Fprintf(b, " LC_COLLATE '%s' ", pqQuoteLiteral(v.(string)))
-	case v.(string) == "":
-		fmt.Fprint(b, ` LC_COLLATE 'C'`)
-	}
-
-	switch v, ok := d.GetOk(dbCTypeAttr); {
-	case ok && strings.ToUpper(v.(string)) == "DEFAULT":
-		fmt.Fprintf(b, " LC_CTYPE DEFAULT")
-	case ok:
-		fmt.Fprintf(b, " LC_CTYPE '%s' ", pqQuoteLiteral(v.(string)))
-	case v.(string) == "":
-		fmt.Fprint(b, ` LC_CTYPE 'C'`)
-	}
-
-	switch v, ok := d.GetOk(dbTablespaceAttr); {
-	case ok && strings.ToUpper(v.(string)) == "DEFAULT":
-		fmt.Fprint(b, " TABLESPACE DEFAULT")
-	case ok:
-		fmt.Fprint(b, " TABLESPACE ", pq.QuoteIdentifier(v.(string)))
-	}
-
-	if c.featureSupported(featureDBAllowConnections) {
-		val := d.Get(dbAllowConnsAttr).(bool)
-		fmt.Fprint(b, " ALLOW_CONNECTIONS ", val)
-	}
-
-	{
-		val := d.Get(dbConnLimitAttr).(int)
-		fmt.Fprint(b, " CONNECTION LIMIT ", val)
-	}
-
-	if c.featureSupported(featureDBIsTemplate) {
-		val := d.Get(dbIsTemplateAttr).(bool)
-		fmt.Fprint(b, " IS_TEMPLATE ", val)
 	}
 
 	sql := b.String()
@@ -301,8 +241,8 @@ func resourcePostgreSQLDatabaseReadImpl(d *schema.ResourceData, meta interface{}
 	c := meta.(*Client)
 
 	dbId := d.Id()
-	var dbName, ownerName string
-	err := c.DB().QueryRow("SELECT d.datname, pg_catalog.pg_get_userbyid(d.datdba) from pg_database d WHERE datname=$1", dbId).Scan(&dbName, &ownerName)
+	var dbName string
+	err := c.DB().QueryRow("SELECT d.datname from pg_database d WHERE datname=$1", dbId).Scan(&dbName)
 	switch {
 	case err == sql.ErrNoRows:
 		log.Printf("[WARN] PostgreSQL database (%q) not found", dbId)
@@ -345,7 +285,6 @@ func resourcePostgreSQLDatabaseReadImpl(d *schema.ResourceData, meta interface{}
 	}
 
 	d.Set(dbNameAttr, dbName)
-	d.Set(dbOwnerAttr, ownerName)
 	d.Set(dbEncodingAttr, dbEncoding)
 	d.Set(dbCollationAttr, dbCollation)
 	d.Set(dbCTypeAttr, dbCType)
