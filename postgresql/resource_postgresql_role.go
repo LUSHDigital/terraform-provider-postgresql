@@ -61,8 +61,7 @@ func resourcePostgreSQLRole() *schema.Resource {
 			roleValidUntilAttr: {
 				Type:        schema.TypeString,
 				Optional:    true,
-				Default:     "infinity",
-				Description: "Sets a date and time after which the role's password is no longer valid",
+				Description: "Sets a date and time after which the role's password is no longer valid. Infinity is not valid",
 			},
 			roleCreateRoleAttr: {
 				Type:        schema.TypeBool,
@@ -141,10 +140,7 @@ func resourcePostgreSQLRoleCreate(d *schema.ResourceData, meta interface{}) erro
 					createOpts = append(createOpts, fmt.Sprintf("%s '%s'", opt.sqlKey, pqQuoteLiteral(val)))
 				}
 			case opt.hclKey == roleValidUntilAttr:
-				switch {
-				case v.(string) == "", strings.ToLower(v.(string)) == "infinity":
-					createOpts = append(createOpts, fmt.Sprintf("%s '%s'", opt.sqlKey, "infinity"))
-				default:
+				if strings.ToUpper(v.(string)) != "NULL" {
 					createOpts = append(createOpts, fmt.Sprintf("%s '%s'", opt.sqlKey, pqQuoteLiteral(val)))
 				}
 			default:
