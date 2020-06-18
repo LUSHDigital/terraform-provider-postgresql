@@ -18,11 +18,9 @@ import (
 
 const (
 	roleCreateRoleAttr       = "create_role"
-	roleLoginAttr            = "login"
 	roleNameAttr             = "name"
 	rolePasswordAttr         = "password"
 	roleSkipDropRoleAttr     = "skip_drop_role"
-	roleValidUntilAttr       = "valid_until"
 	roleRolesAttr            = "roles"
 	roleStatementTimeoutAttr = "statement_timeout"
 )
@@ -58,22 +56,11 @@ func resourcePostgreSQLRole() *schema.Resource {
 				MinItems:    0,
 				Description: "Role(s) to grant to this new role",
 			},
-			roleValidUntilAttr: {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "Sets a date and time after which the role's password is no longer valid. Infinity is not valid",
-			},
 			roleCreateRoleAttr: {
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Default:     false,
 				Description: "Determine whether this role will be permitted to create new roles",
-			},
-			roleLoginAttr: {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
-				Description: "Determine whether a role is allowed to log in",
 			},
 			roleSkipDropRoleAttr: {
 				Type:        schema.TypeBool,
@@ -107,7 +94,6 @@ func resourcePostgreSQLRoleCreate(d *schema.ResourceData, meta interface{}) erro
 		sqlKey string
 	}{
 		{rolePasswordAttr, "PASSWORD"},
-		{roleValidUntilAttr, "VALID UNTIL"},
 	}
 
 	type boolOptType struct {
@@ -117,7 +103,6 @@ func resourcePostgreSQLRoleCreate(d *schema.ResourceData, meta interface{}) erro
 	}
 	boolOpts := []boolOptType{
 		{roleCreateRoleAttr, "CREATEROLE", "NOCREATEROLE"},
-		{roleLoginAttr, "LOGIN", "NOLOGIN"},
 		// roleEncryptedPassAttr is used only when rolePasswordAttr is set.
 		// {roleEncryptedPassAttr, "ENCRYPTED", "UNENCRYPTED"},
 	}
@@ -139,10 +124,6 @@ func resourcePostgreSQLRoleCreate(d *schema.ResourceData, meta interface{}) erro
 				} else {
 					createOpts = append(createOpts, fmt.Sprintf("%s '%s'", opt.sqlKey, pqQuoteLiteral(val)))
 				}
-			case opt.hclKey == roleValidUntilAttr:
-				if strings.ToUpper(v.(string)) != "NULL" {
-					createOpts = append(createOpts, fmt.Sprintf("%s '%s'", opt.sqlKey, pqQuoteLiteral(val)))
-				}
 			default:
 				createOpts = append(createOpts, fmt.Sprintf("%s %s", opt.sqlKey, pq.QuoteIdentifier(val)))
 			}
@@ -161,15 +142,10 @@ func resourcePostgreSQLRoleCreate(d *schema.ResourceData, meta interface{}) erro
 	roleName := d.Get(roleNameAttr).(string)
 	createStr := strings.Join(createOpts, " ")
 	if len(createOpts) > 0 {
-		if c.featureSupported(featureCreateRoleWith) {
-			createStr = " WITH " + createStr
-		} else {
-			// NOTE(seanc@): Work around ParAccel/AWS RedShift's ancient fork of PostgreSQL
-			createStr = " " + createStr
-		}
+		createStr = " " + createStr
 	}
 
-	sql := fmt.Sprintf("CREATE ROLE %s%s", pq.QuoteIdentifier(roleName), createStr)
+	sql := fmt.Sprintf("CREATE ROLE %s WITH LOGIN %s", pq.QuoteIdentifier(roleName), createStr)
 	if _, err := txn.Exec(sql); err != nil {
 		return errwrap.Wrapf(fmt.Sprintf("error creating role %s: {{err}}", roleName), err)
 	}
@@ -253,8 +229,8 @@ func resourcePostgreSQLRoleRead(d *schema.ResourceData, meta interface{}) error 
 }
 
 func resourcePostgreSQLRoleReadImpl(c *Client, d *schema.ResourceData) error {
-	var roleCreateRole, roleCanLogin bool
-	var roleName, roleValidUntil string
+	var roleCreateRole bool
+	var roleName string
 	var roleRoles, roleConfig pq.ByteaArray
 
 	roleID := d.Id()
@@ -262,8 +238,6 @@ func resourcePostgreSQLRoleReadImpl(c *Client, d *schema.ResourceData) error {
 	columns := []string{
 		"rolname",
 		"rolcreaterole",
-		"rolcanlogin",
-		`COALESCE(rolvaliduntil::TEXT, 'infinity')`,
 		"rolconfig",
 	}
 
@@ -271,8 +245,6 @@ func resourcePostgreSQLRoleReadImpl(c *Client, d *schema.ResourceData) error {
 		&roleRoles,
 		&roleName,
 		&roleCreateRole,
-		&roleCanLogin,
-		&roleValidUntil,
 		&roleConfig,
 	}
 
@@ -296,9 +268,7 @@ func resourcePostgreSQLRoleReadImpl(c *Client, d *schema.ResourceData) error {
 
 	d.Set(roleNameAttr, roleName)
 	d.Set(roleCreateRoleAttr, roleCreateRole)
-	d.Set(roleLoginAttr, roleCanLogin)
 	d.Set(roleSkipDropRoleAttr, d.Get(roleSkipDropRoleAttr).(bool))
-	d.Set(roleValidUntilAttr, roleValidUntil)
 	d.Set(roleRolesAttr, pgArrayToSet(roleRoles))
 
 	statementTimeout, err := readStatementTimeout(roleConfig)
@@ -310,7 +280,7 @@ func resourcePostgreSQLRoleReadImpl(c *Client, d *schema.ResourceData) error {
 
 	d.SetId(roleName)
 
-	password, err := readRolePassword(c, d, roleCanLogin)
+	password, err := readRolePassword(c, d)
 	if err != nil {
 		return err
 	}
@@ -338,13 +308,13 @@ func readStatementTimeout(roleConfig pq.ByteaArray) (int, error) {
 
 // readRolePassword reads password either from Postgres if admin user is a superuser
 // or only from Terraform state.
-func readRolePassword(c *Client, d *schema.ResourceData, roleCanLogin bool) (string, error) {
+func readRolePassword(c *Client, d *schema.ResourceData) (string, error) {
 	statePassword := d.Get(rolePasswordAttr).(string)
 
 	// Role which cannot login does not have password in pg_shadow.
 	// Also, if user specifies that admin is not a superuser we don't try to read pg_shadow
 	// (only superuser can read pg_shadow)
-	if !roleCanLogin || !c.config.Superuser {
+	if !c.config.Superuser {
 		return statePassword, nil
 	}
 
@@ -415,14 +385,6 @@ func resourcePostgreSQLRoleUpdate(d *schema.ResourceData, meta interface{}) erro
 	}
 
 	if err := setRoleCreateRole(txn, d); err != nil {
-		return err
-	}
-
-	if err := setRoleLogin(txn, d); err != nil {
-		return err
-	}
-
-	if err := setRoleValidUntil(txn, d); err != nil {
 		return err
 	}
 
@@ -499,46 +461,6 @@ func setRoleCreateRole(txn *sql.Tx, d *schema.ResourceData) error {
 	sql := fmt.Sprintf("ALTER ROLE %s WITH %s", pq.QuoteIdentifier(roleName), tok)
 	if _, err := txn.Exec(sql); err != nil {
 		return errwrap.Wrapf("Error updating role CREATEROLE: {{err}}", err)
-	}
-
-	return nil
-}
-
-func setRoleLogin(txn *sql.Tx, d *schema.ResourceData) error {
-	if !d.HasChange(roleLoginAttr) {
-		return nil
-	}
-
-	login := d.Get(roleLoginAttr).(bool)
-	tok := "NOLOGIN"
-	if login {
-		tok = "LOGIN"
-	}
-	roleName := d.Get(roleNameAttr).(string)
-	sql := fmt.Sprintf("ALTER ROLE %s WITH %s", pq.QuoteIdentifier(roleName), tok)
-	if _, err := txn.Exec(sql); err != nil {
-		return errwrap.Wrapf("Error updating role LOGIN: {{err}}", err)
-	}
-
-	return nil
-}
-
-func setRoleValidUntil(txn *sql.Tx, d *schema.ResourceData) error {
-	if !d.HasChange(roleValidUntilAttr) {
-		return nil
-	}
-
-	validUntil := d.Get(roleValidUntilAttr).(string)
-	if validUntil == "" {
-		return nil
-	} else if strings.ToLower(validUntil) == "infinity" {
-		validUntil = "infinity"
-	}
-
-	roleName := d.Get(roleNameAttr).(string)
-	sql := fmt.Sprintf("ALTER ROLE %s VALID UNTIL '%s'", pq.QuoteIdentifier(roleName), pqQuoteLiteral(validUntil))
-	if _, err := txn.Exec(sql); err != nil {
-		return errwrap.Wrapf("Error updating role VALID UNTIL: {{err}}", err)
 	}
 
 	return nil

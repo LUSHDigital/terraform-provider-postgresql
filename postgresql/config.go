@@ -40,9 +40,6 @@ var (
 
 	// Mapping of feature flags to versions
 	featureSupported = map[featureName]semver.Range{
-		// CREATE ROLE WITH
-		featureCreateRoleWith: semver.MustParseRange(">=8.1.0"),
-
 		// CREATE DATABASE has ALLOW_CONNECTIONS support
 		featureDBAllowConnections: semver.MustParseRange(">=9.5.0"),
 
