@@ -3,6 +3,13 @@ Terraform Provider
 
 :exclamation: :exclamation: This is not _really_ for postgresql. This is for CockroachDB. :exclamation: :exclamation:
 
+Caveats for this fork:
+- Users are created with the LOGIN option and no expiry
+
+Resources ported for Cockroachdb:
+- Databases
+- Users
+
 - Website: https://www.terraform.io
 - [![Gitter chat](https://badges.gitter.im/hashicorp-terraform/Lobby.png)](https://gitter.im/hashicorp-terraform/Lobby)
 - Mailing list: [Google Groups](http://groups.google.com/group/terraform-tool)
