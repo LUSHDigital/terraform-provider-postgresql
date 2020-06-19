@@ -14,6 +14,11 @@ import (
 	"github.com/lib/pq"
 )
 
+var objectTypes = map[string]string{
+	"table":    "r",
+	"sequence": "S",
+}
+
 func resourcePostgreSQLDefaultPrivileges() *schema.Resource {
 	return &schema.Resource{
 		Create: resourcePostgreSQLDefaultPrivilegesCreate,

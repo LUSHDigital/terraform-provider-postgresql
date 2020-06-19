@@ -105,28 +105,17 @@ func sliceContainsStr(haystack []string, needle string) bool {
 // see: https://www.postgresql.org/docs/current/sql-grant.html
 var allowedPrivileges = map[string][]string{
 	"database": []string{"ALL", "CREATE", "CONNECT", "TEMPORARY", "TEMP"},
-	"table":    []string{"ALL", "SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"},
-	"sequence": []string{"ALL", "USAGE", "SELECT", "UPDATE"},
 }
 
 // validatePrivileges checks that privileges to apply are allowed for this object type.
 func validatePrivileges(d *schema.ResourceData) error {
-	objectType := d.Get("object_type").(string)
 	privileges := d.Get("privileges").(*schema.Set).List()
 
-	// Verify fields that are mandatory for specific object types
-	if objectType != "database" && d.Get("schema").(string) == "" {
-		return fmt.Errorf("parameter 'schema' is mandatory for object_type %s", objectType)
-	}
-
-	allowed, ok := allowedPrivileges[objectType]
-	if !ok {
-		return fmt.Errorf("unknown object type %s", objectType)
-	}
+	allowed := allowedPrivileges["database"]
 
 	for _, priv := range privileges {
 		if !sliceContainsStr(allowed, priv.(string)) {
-			return fmt.Errorf("%s is not an allowed privilege for object type %s", priv, objectType)
+			return fmt.Errorf("%s is not an allowed privilege for object type %s", priv, "database")
 		}
 	}
 	return nil

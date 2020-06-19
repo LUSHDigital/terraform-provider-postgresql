@@ -21,59 +21,19 @@ func TestCreateGrantQuery(t *testing.T) {
 	}{
 		{
 			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
-				"object_type": "table",
-				"schema":      databaseName,
-				"role":        roleName,
-			}),
-			privileges: []string{"SELECT"},
-			expected:   fmt.Sprintf("GRANT SELECT ON ALL TABLES IN SCHEMA %s TO %s", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
-		},
-		{
-			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
-				"object_type": "sequence",
-				"schema":      databaseName,
-				"role":        roleName,
-			}),
-			privileges: []string{"SELECT"},
-			expected:   fmt.Sprintf("GRANT SELECT ON ALL SEQUENCES IN SCHEMA %s TO %s", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
-		},
-		{
-			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
-				"object_type":       "TABLE",
-				"schema":            databaseName,
-				"role":              roleName,
-				"with_grant_option": true,
-			}),
-			privileges: []string{"SELECT", "INSERT", "UPDATE"},
-			expected:   fmt.Sprintf("GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA %s TO %s WITH GRANT OPTION", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
-		},
-		{
-			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
-				"object_type": "database",
-				"database":    databaseName,
-				"role":        roleName,
+				"database": databaseName,
+				"role":     roleName,
 			}),
 			privileges: []string{"CREATE"},
 			expected:   fmt.Sprintf("GRANT CREATE ON DATABASE %s TO %s", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
 		},
 		{
 			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
-				"object_type": "database",
-				"database":    databaseName,
-				"role":        roleName,
+				"database": databaseName,
+				"role":     roleName,
 			}),
 			privileges: []string{"CREATE", "CONNECT"},
 			expected:   fmt.Sprintf("GRANT CREATE,CONNECT ON DATABASE %s TO %s", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
-		},
-		{
-			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
-				"object_type":       "DATABASE",
-				"database":          databaseName,
-				"role":              roleName,
-				"with_grant_option": true,
-			}),
-			privileges: []string{"ALL PRIVILEGES"},
-			expected:   fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s WITH GRANT OPTION", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
 		},
 	}
 
@@ -95,35 +55,10 @@ func TestCreateRevokeQuery(t *testing.T) {
 	}{
 		{
 			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
-				"object_type": "table",
-				"schema":      databaseName,
-				"role":        roleName,
+				"database": databaseName,
+				"role":     roleName,
 			}),
-			expected: fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s FROM %s", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
-		},
-		{
-			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
-				"object_type": "sequence",
-				"schema":      databaseName,
-				"role":        roleName,
-			}),
-			expected: fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s FROM %s", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
-		},
-		{
-			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
-				"object_type": "database",
-				"database":    databaseName,
-				"role":        roleName,
-			}),
-			expected: fmt.Sprintf("REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
-		},
-		{
-			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
-				"object_type": "DATABASE",
-				"database":    databaseName,
-				"role":        roleName,
-			}),
-			expected: fmt.Sprintf("REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
+			expected: fmt.Sprintf("REVOKE ALL ON DATABASE %s FROM %s", pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
 		},
 	}
 

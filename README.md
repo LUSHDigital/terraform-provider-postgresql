@@ -5,10 +5,12 @@ Terraform Provider
 
 Caveats for this fork:
 - Users are created with the LOGIN option and no expiry
+- Grants are scoped to ALL permissions on Databases only, not table granularity
 
 Resources ported for Cockroachdb:
 - Databases
 - Users
+- Grants
 
 - Website: https://www.terraform.io
 - [![Gitter chat](https://badges.gitter.im/hashicorp-terraform/Lobby.png)](https://gitter.im/hashicorp-terraform/Lobby)
