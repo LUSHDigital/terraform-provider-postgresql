@@ -17,12 +17,10 @@ import (
 var allowedObjectTypes = []string{
 	"database",
 	"table",
-	"sequence",
 }
 
 var objectTypes = map[string]string{
-	"table":    "r",
-	"sequence": "S",
+	"table": "r",
 }
 
 func resourcePostgreSQLGrant() *schema.Resource {
@@ -66,13 +64,6 @@ func resourcePostgreSQLGrant() *schema.Resource {
 				Set:         schema.HashString,
 				MinItems:    1,
 				Description: "The list of privileges to grant",
-			},
-			"with_grant_option": {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				ForceNew:    true,
-				Default:     false,
-				Description: "Permit the grant recipient to grant it to others",
 			},
 		},
 	}
@@ -194,20 +185,20 @@ func resourcePostgreSQLGrantDelete(d *schema.ResourceData, meta interface{}) err
 func readDatabaseRolePriviges(txn *sql.Tx, d *schema.ResourceData) error {
 	query := `
 SELECT privilege_type
-FROM (
-	SELECT (aclexplode(datacl)).* FROM pg_database WHERE datname=$1
-) as privileges
-JOIN pg_roles ON grantee = pg_roles.oid WHERE rolname = $2
+FROM information_schema.schema_privileges
+WHERE grantee=$1
+AND table_schema='public';
 `
 
 	privileges := []string{}
-	rows, err := txn.Query(query, d.Get("database"), d.Get("role"))
+	rows, err := txn.Query(query, d.Get("role"))
 	if err != nil {
 		return errwrap.Wrapf("could not read database privileges: {{err}}", err)
 	}
 
 	for rows.Next() {
 		var privilegeType string
+
 		if err := rows.Scan(&privilegeType); err != nil {
 			return errwrap.Wrapf("could not scan database privilege: {{err}}", err)
 		}
@@ -229,51 +220,33 @@ func readRolePrivileges(txn *sql.Tx, d *schema.ResourceData) error {
 	//
 	// Our goal is to check that every object has the same privileges as saved in the state.
 	query := `
-SELECT pg_class.relname, array_remove(array_agg(privilege_type), NULL)
-FROM pg_class
-JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
-LEFT JOIN (
-    SELECT acls.* FROM (
-        SELECT relname, relnamespace, relkind, (aclexplode(relacl)).* FROM pg_class c
-    ) as acls
-    JOIN pg_roles on grantee = pg_roles.oid
-    WHERE rolname=$1
-) privs
-USING (relname, relnamespace, relkind)
-WHERE nspname = $2 AND relkind = $3
-GROUP BY pg_class.relname;
+SELECT DISTINCT privilege_type
+FROM information_schema.table_privileges
+WHERE grantee=$1
+AND table_schema=$2
+ORDER BY privilege_type;
 `
 
-	objectType := d.Get("object_type").(string)
+	privileges := []string{}
 	rows, err := txn.Query(
-		query, d.Get("role"), d.Get("schema"), objectTypes[objectType],
+		query, d.Get("role"), d.Get("schema"),
 	)
 	if err != nil {
 		return err
 	}
 
 	for rows.Next() {
-		var objName string
-		var privileges pq.ByteaArray
+		var privilegeType string
 
-		if err := rows.Scan(&objName, &privileges); err != nil {
-			return err
+		if err := rows.Scan(&privilegeType); err != nil {
+			return errwrap.Wrapf("could not scan role privilege: {{err}}", err)
 		}
-		privilegesSet := pgArrayToSet(privileges)
 
-		if !privilegesSet.Equal(d.Get("privileges").(*schema.Set)) {
-			// If any object doesn't have the same privileges as saved in the state,
-			// we return an empty privileges to force an update.
-			log.Printf(
-				"[DEBUG] %s %s has not the expected privileges %v for role %s",
-				strings.ToTitle(objectType), objName, privileges, d.Get("role"),
-			)
-			d.Set("privileges", schema.NewSet(schema.HashString, []interface{}{}))
-			break
-		}
+		privileges = append(privileges, privilegeType)
 
 	}
 
+	d.Set("privileges", privileges)
 	return nil
 }
 
@@ -288,18 +261,13 @@ func createGrantQuery(d *schema.ResourceData, privileges []string) string {
 			pq.QuoteIdentifier(d.Get("database").(string)),
 			pq.QuoteIdentifier(d.Get("role").(string)),
 		)
-	case "TABLE", "SEQUENCE":
+	case "TABLE":
 		query = fmt.Sprintf(
-			"GRANT %s ON ALL %sS IN SCHEMA %s TO %s",
+			"GRANT %s ON %s.* TO %s",
 			strings.Join(privileges, ","),
-			strings.ToUpper(d.Get("object_type").(string)),
-			pq.QuoteIdentifier(d.Get("schema").(string)),
+			strings.ToUpper(d.Get("database").(string)),
 			pq.QuoteIdentifier(d.Get("role").(string)),
 		)
-	}
-
-	if d.Get("with_grant_option").(bool) == true {
-		query = query + " WITH GRANT OPTION"
 	}
 
 	return query
@@ -311,15 +279,14 @@ func createRevokeQuery(d *schema.ResourceData) string {
 	switch strings.ToUpper(d.Get("object_type").(string)) {
 	case "DATABASE":
 		query = fmt.Sprintf(
-			"REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s",
+			"REVOKE ALL ON DATABASE %s FROM %s",
 			pq.QuoteIdentifier(d.Get("database").(string)),
 			pq.QuoteIdentifier(d.Get("role").(string)),
 		)
-	case "TABLE", "SEQUENCE":
+	case "TABLE":
 		query = fmt.Sprintf(
-			"REVOKE ALL PRIVILEGES ON ALL %sS IN SCHEMA %s FROM %s",
-			strings.ToUpper(d.Get("object_type").(string)),
-			pq.QuoteIdentifier(d.Get("schema").(string)),
+			"REVOKE ALL ON %s.* FROM %s",
+			strings.ToUpper(d.Get("database").(string)),
 			pq.QuoteIdentifier(d.Get("role").(string)),
 		)
 	}
